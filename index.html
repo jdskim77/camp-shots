@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3a53">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Camp Shots">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Camp Shot List · SurfScout</title>
+<style>
+  :root { --bg:#f4f7f8; --card:#fff; --ink:#0f2530; --muted:#5c7480; --brand:#0b3a53; --accent:#ff7a3d; --ok:#1f9d6b; --line:#e2e9ec; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); -webkit-tap-highlight-color:transparent; }
+  header { position:sticky; top:0; z-index:5; background:var(--brand); color:#fff; padding:calc(10px + env(safe-area-inset-top)) 14px 10px; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  .camps, .filters { display:flex; gap:6px; overflow-x:auto; }
+  .camps button, .filters button { flex:none; border:0; border-radius:999px; padding:7px 12px; font-size:14px; background:rgba(255,255,255,.15); color:#fff; }
+  .camps button.on { background:#fff; color:var(--brand); font-weight:600; }
+  .filters { padding:10px 14px 0; }
+  .filters button { background:#e3ebee; color:var(--ink); font-size:13px; }
+  .filters button.on { background:var(--ink); color:#fff; }
+  .bar { height:6px; background:rgba(255,255,255,.2); border-radius:3px; margin-top:10px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--accent); width:0; transition:width .3s; }
+  .stat { font-size:12px; opacity:.85; margin-top:5px; }
+  main { padding:6px 12px 90px; max-width:720px; margin:0 auto; }
+  details.section { background:var(--card); border-radius:14px; margin:10px 0; border:1px solid var(--line); }
+  details.section > summary { list-style:none; padding:13px 14px; font-weight:650; font-size:15px; display:flex; justify-content:space-between; align-items:center; }
+  details.section > summary::-webkit-details-marker { display:none; }
+  summary .count { font-weight:500; font-size:12px; color:var(--muted); }
+  .why { font-size:12.5px; color:var(--muted); padding:0 14px 8px; margin-top:-6px; }
+  .shot { display:flex; gap:10px; padding:11px 14px; border-top:1px solid var(--line); }
+  .shot input[type=checkbox] { width:24px; height:24px; flex:none; margin-top:1px; accent-color:var(--ok); }
+  .shot.done .title { text-decoration:line-through; color:var(--muted); }
+  .title { font-size:15px; line-height:1.3; }
+  .tip { font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.35; }
+  .tags { margin-top:5px; display:flex; gap:5px; flex-wrap:wrap; }
+  .tag { font-size:11px; padding:2px 7px; border-radius:6px; background:#eef3f5; color:var(--muted); }
+  .tag.v { background:#ffe9dd; color:#b4471a; }
+  .tag.p { background:#dff1fb; color:#14608a; }
+  .tag.must { background:#ffeded; color:#c0392b; font-weight:600; }
+  .note { width:100%; margin-top:6px; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font:inherit; font-size:13px; display:none; }
+  .shot.open .note { display:block; }
+  .nbtn { background:none; border:0; color:#14608a; font-size:12px; padding:4px 0 0; }
+  .card { background:#fff8e8; border:1px solid #f3e1b5; border-radius:14px; padding:12px 14px; margin:12px 0; font-size:13.5px; line-height:1.45; }
+  .card h3 { margin:0 0 6px; font-size:14px; }
+  .card ul { margin:0; padding-left:18px; }
+  footer { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:8px; }
+  footer button { flex:1; border:0; border-radius:10px; padding:12px; font-size:14px; font-weight:600; background:var(--brand); color:#fff; }
+  footer button.sec { background:#e3ebee; color:var(--ink); }
+  .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:9px 14px; border-radius:10px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.show { opacity:1; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📸 Camp Review Shot List</h1>
+  <div class="camps" id="camps"></div>
+  <div class="bar"><i id="prog"></i></div>
+  <div class="stat" id="stat"></div>
+</header>
+<div class="filters" id="filters">
+  <button data-f="all" class="on">All</button>
+  <button data-f="must">Must-haves</button>
+  <button data-f="photo">Photos</button>
+  <button data-f="video">Videos</button>
+  <button data-f="todo">Not done</button>
+</div>
+<main id="main"></main>
+<footer>
+  <button class="sec" id="reset">Reset camp</button>
+  <button id="share">Share progress</button>
+</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- Data -------------------------------------------------------------
+// P = photo, V = video. must = needed for the review / site listing.
+const CAMPS = {
+  padang: {
+    name: "Padang Padang Surf Camp",
+    short: "Padang Padang",
+    blurb: "Coaching-first camp above Padang Padang (since 2005). Our listing claims: private en-suite rooms only, ~20 guests, groups capped at 6, a coaching session between surfs, pool, ice bath + sauna, surf skate bowl + pump track, yoga shala, coworking. Breakfast + lunch included, dinner NOT. Lessons billed separately (GBP 20/session).",
+    verify: [
+      ["Ice bath + sauna", "P", true, "Wide shot showing both. Video of someone using the ice bath if they're happy to be filmed."],
+      ["Surf skate bowl + pump track", "V", true, "10–15 s of someone skating the bowl. Strong social hook clip."],
+      ["Yoga shala", "P", false, "Wide, empty or mid-class (ask first)."],
+      ["Coworking space", "P", true, "Desks, plugs, a laptop. Screenshot a Wi-Fi speed test from there."],
+      ["Coaching session between surfs", "V", true, "Video review, land drills, pool drills or surf skate, whichever runs that day. This is their selling point."],
+      ["Group size in the water", "P", true, "One wide frame where you can count a lesson group (we say max 6). Write the real number in the note."],
+      ["Head coaches (Richie / Randy)", "P", false, "Portrait only with their OK. Note their names and roles as they say them."],
+      ["Lesson price sheet / board", "P", true, "We say GBP 20 a session, GBP 35 for two in a day, guiding GBP 12–20. Photo of any printed price list."],
+      ["Where people eat dinner", "P", false, "Dinner isn't included. Snap the warung/restaurant the group goes to and note the cost."],
+      ["Check: any dorms?", "P", false, "We say private rooms only. If you see a dorm, photo + note it."],
+    ],
+    wave: [
+      ["Padang Padang from the cliff/stairs", "V", true, "Wide 15 s of the lineup from above. Landscape and vertical."],
+      ["The walk down to Padang beach (cave/stairs)", "V", false, "POV walking clip; note minutes from the camp."],
+    ]
+  },
+  kima: {
+    name: "Kima Surf Uluwatu",
+    short: "Kima Uluwatu",
+    blurb: "New Kima camp on the Bukit cliffs near Thomas Beach (first season). Our listing claims: twice-daily guiding across 6 levels, video analysis + surf theory daily, pool, gardens, on-site bar, 3-course breakfast, snacks between sessions, free-flow coffee, Saturday BBQ, yoga 6 days/week, a Kima boat to outer reefs, premium board rental. Rooms: dorm / room / villa.",
+    verify: [
+      ["Pool + garden wide", "P", true, "Their hero shot. Landscape for the site, vertical for socials."],
+      ["On-site bar", "P", true, "Daytime and one evening shot with people (ask first)."],
+      ["3-course breakfast", "P", true, "Overhead shot of each course on day 1. Note what's actually included."],
+      ["Snacks + free-flow coffee station", "P", false, "Proof of the 'finger foods between sessions' claim."],
+      ["Dorm vs Room vs Villa", "P", true, "Try to see all three (ask reception). Note your room type and the price you paid."],
+      ["Board quiver", "P", true, "We say shortboards 5'8\"–7'0\", funshapes, mini mals 7'0\"–7'8\". Photo the rack; note if soft-tops exist for beginners."],
+      ["Video analysis / surf theory session", "V", true, "10–15 s of the session running. Note if it really happens daily."],
+      ["Kima boat trip", "V", false, "Only if it runs while you're there. Boat loading + outer reef lineup."],
+      ["Beginner course spot", "V", false, "Beginners go to Thomas Beach / Balangan / Dreamland. Clip of the lesson + note the drive time."],
+      ["Concierge / front desk", "P", false, "Claimed 7 am–11 pm. Note how fast WhatsApp replies are."],
+      ["Saturday BBQ", "V", false, "Only if your stay hits a Saturday."],
+      ["New-build check", "P", true, "'Newly built': photo any unfinished areas, building work or noise sources. Honest review gold."],
+    ],
+    wave: [
+      ["Walk/stairs down to Thomas Beach", "V", true, "POV clip + minutes from the camp. Cliff camps often mean lots of steps."],
+      ["Uluwatu / Balangan lineup from shore", "V", false, "Wide 15 s of wherever they take your level."],
+    ]
+  }
+};
+
+// Shared sections (both camps)
+const COMMON = [
+  { id:"arrive", title:"1 · Arrival & first impression", why:"Sets the scene for the review intro and the 'what it's really like' Reel.", shots:[
+    ["Entrance / sign from the street", "P", true, "Landscape, daylight. This becomes the listing's 'you're here' photo."],
+    ["Walk-in POV, gate to reception", "V", true, "One steady 15–20 s take, vertical. No talking needed."],
+    ["Your first-impression selfie video", "V", true, "20 s to camera: 'First impression of X is…'. Honest beats polished."],
+  ]},
+  { id:"room", title:"2 · Your room", why:"Most-asked question from bookers. Shoot BEFORE you unpack.", shots:[
+    ["Room wide from the doorway", "P", true, "0.5× lens, lights on, curtains open. Landscape + portrait."],
+    ["Bathroom + shower", "P", true, "Run the shower: note if hot water works and how long it takes."],
+    ["View from room / balcony", "P", false, ""],
+    ["One-take room tour", "V", true, "30–45 s, slow pan, vertical. Door → bed → bathroom → view."],
+    ["Where your board/gear goes", "P", false, "Board storage, hooks, drying rack."],
+    ["Wi-Fi speed test (screenshot)", "P", true, "Run it in the room and in the common area. Put Mbps in the note."],
+  ]},
+  { id:"common", title:"3 · Pool & common areas", why:"Camp-life shots are our biggest asset gap. Free photo libraries don't have them.", shots:[
+    ["Pool wide, empty, midday", "P", true, "Clean hero shot for the site. Landscape, 1920px+."],
+    ["Pool with people in it", "V", true, "Someone jumping in = great hook clip. Ask first."],
+    ["Lounge / chill area", "P", false, ""],
+    ["Dining area at a meal", "P", true, "Shows how social it is. Wide, faces small or with OK."],
+  ]},
+  { id:"food", title:"4 · Food", why:"'What's included' is the #1 confusion on camp pricing.", shots:[
+    ["Every included meal, overhead", "P", true, "One photo per meal. Note: included or paid extra?"],
+    ["Plate pan / buffet walk-by", "V", false, "5–8 s vertical."],
+  ]},
+  { id:"surf", title:"5 · The surf programme", why:"This is the review. Prove the coaching, not just the scenery.", shots:[
+    ["Board rack / rental quiver", "P", true, "Note foam/soft-tops vs hard boards, and condition."],
+    ["Morning briefing / surf check", "V", true, "Coach explaining the plan. 15 s."],
+    ["Van / transfer loading boards", "V", true, "Note drive time to each break in the note."],
+    ["Lineup from shore, wide", "V", true, "15 s, tripod/steady. Landscape + vertical."],
+    ["Lesson group in the water", "V", true, "Coach pushing a student into a wave. Get men AND women in your clips."],
+    ["Surfer riding, full body in frame", "V", true, "Zoom 2–3×, follow the whole ride. Surfer must stay in frame start to finish."],
+    ["Pop-up / paddle-out close-ups", "V", false, "Short action clips for Reels."],
+    ["Video-analysis screen", "P", false, "Their screen showing footage, if they do it."],
+    ["You surfing (ask the camp photographer)", "V", false, "Ask what their photo/video package costs. Note it."],
+  ]},
+  { id:"honest", title:"6 · Honest stuff", why:"SurfScout's edge is honesty. Capture the downsides too.", shots:[
+    ["Stairs / distance to the beach", "V", true, "POV walk + minutes. Note if it's a hard climb with a board."],
+    ["Noise (roads, roosters, bar, building)", "V", false, "10 s audio-on clip if it's loud at night."],
+    ["Anything worn, broken or not as advertised", "P", true, "Mould, broken fittings, missing amenities. Note what was promised."],
+    ["Crowd in the lineup", "P", false, "Count heads at the break at peak time."],
+  ]},
+  { id:"social", title:"7 · Social hooks (Reels/TikTok)", why:"Short vertical clips we can cut into posts. Hook in the first second.", shots:[
+    ["Waxing a board, close-up", "V", false, "5 s, 60 fps for slow-mo."],
+    ["Paddle-out POV (if you have a mount)", "V", false, ""],
+    ["Sunset session from the cliff", "V", false, "Max 1–2 golden-hour clips. They don't match our blue palette."],
+    ["Group hanging out after surf", "V", false, "Ask the group first."],
+  ]},
+  { id:"verdict", title:"8 · Your verdict (last day)", why:"The voice of the review. Do it before you check out.", shots:[
+    ["Verdict selfie video", "V", true, "45–60 s: who it's for, who should skip it, would you rebook, real total cost."],
+    ["Final receipt / what you paid", "P", true, "Private, for our pricing data only."],
+  ]},
+];
+
+// ---- State ------------------------------------------------------------
+const KEY = "campshots.v1";
+let state = JSON.parse(localStorage.getItem(KEY) || "{}");
+state.camp = state.camp || "padang";
+state.done = state.done || {};
+state.notes = state.notes || {};
+let filter = "all";
+const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+
+function sectionsFor(c) {
+  const camp = CAMPS[c];
+  return [
+    { id:"verify", title:"⭐ Check the listing's claims", why:camp.blurb, shots:camp.verify },
+    { id:"wave", title:"🌊 Getting to the waves", why:"Distance and access are what bookers can't judge from photos.", shots:camp.wave },
+    ...COMMON
+  ];
+}
+const sid = (c, sec, i) => `${c}:${sec}:${i}`;
+
+// ---- Render -----------------------------------------------------------
+function render() {
+  const c = state.camp;
+  document.getElementById("camps").innerHTML = Object.entries(CAMPS).map(([k,v]) =>
+    `<button data-c="${k}" class="${k===c?'on':''}">${v.short}</button>`).join("");
+  const main = document.getElementById("main");
+  let html = "", total=0, done=0, mustT=0, mustD=0;
+  if (!state.introHidden) html += `<div class="card" id="intro"><h3>How to shoot (quick rules)</h3><ul>
+    <li><b>Videos:</b> vertical 4K, hold every clip 10 s+. 60 fps for action.</li>
+    <li><b>Photos:</b> shoot landscape AND portrait. Landscape is for the website, portrait for Instagram.</li>
+    <li><b>Daylight, mid-morning to mid-afternoon</b>, so colours stay blue and bright.</li>
+    <li><b>Keep the surfer in frame</b> for the whole clip. Follow the ride.</li>
+    <li><b>Mix men and women</b> in the action clips.</li>
+    <li><b>Ask before filming guests' faces.</b> Get a quick "OK to use on SurfScout?" on video.</li>
+    <li>Avoid other brands' logos and signs in the frame where you can.</li>
+    <li>Tap <b>+ note</b> on a shot to log facts (minutes, Mbps, prices, group size).</li>
+  </ul><button class="nbtn" onclick="state.introHidden=1;save();render()">Hide tips</button></div>`;
+  for (const sec of sectionsFor(c)) {
+    let rows = "", sT=0, sD=0;
+    sec.shots.forEach(([title, type, must, tip], i) => {
+      const id = sid(c, sec.id, i), isDone = !!state.done[id];
+      total++; sT++; if (isDone) { done++; sD++; }
+      if (must) { mustT++; if (isDone) mustD++; }
+      const show = filter==="all" || (filter==="must"&&must) || (filter==="photo"&&type==="P") || (filter==="video"&&type==="V") || (filter==="todo"&&!isDone);
+      if (!show) return;
+      const note = state.notes[id] || "";
+      rows += `<div class="shot ${isDone?'done':''} ${note?'open':''}" data-id="${id}">
+        <input type="checkbox" ${isDone?'checked':''} aria-label="done">
+        <div style="flex:1">
+          <div class="title">${title}</div>
+          ${tip?`<div class="tip">${tip}</div>`:""}
+          <div class="tags">
+            <span class="tag ${type==='V'?'v':'p'}">${type==='V'?'🎥 Video':'📷 Photo'}</span>
+            ${must?'<span class="tag must">Must</span>':''}
+          </div>
+          <button class="nbtn">${note?'✎ note':'+ note'}</button>
+          <textarea class="note" rows="2" placeholder="e.g. 6 min walk, 42 Mbps, 5 in group…">${note.replace(/</g,"&lt;")}</textarea>
+        </div></div>`;
+    });
+    if (!rows) continue;
+    const open = state["open:"+c+sec.id] !== 0;
+    html += `<details class="section" data-sec="${c+sec.id}" ${open?'open':''}><summary>${sec.title}<span class="count">${sD}/${sT}</span></summary>
+      <div class="why">${sec.why}</div>${rows}</details>`;
+  }
+  main.innerHTML = html;
+  document.getElementById("prog").style.width = (total? done/total*100:0)+"%";
+  document.getElementById("stat").textContent = `${CAMPS[c].name} · ${done}/${total} shots · must-haves ${mustD}/${mustT}`;
+}
+
+// ---- Events -----------------------------------------------------------
+document.getElementById("camps").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.camp = b.dataset.c; save(); render(); scrollTo(0,0);
+});
+document.getElementById("filters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll("#filters button").forEach(x => x.classList.toggle("on", x===b));
+  render();
+});
+document.getElementById("main").addEventListener("change", e => {
+  if (e.target.type !== "checkbox") return;
+  const id = e.target.closest(".shot").dataset.id;
+  if (e.target.checked) state.done[id] = Date.now(); else delete state.done[id];
+  save(); render();
+});
+document.getElementById("main").addEventListener("click", e => {
+  if (e.target.classList.contains("nbtn") && e.target.closest(".shot")) {
+    const s = e.target.closest(".shot"); s.classList.add("open"); s.querySelector(".note").focus();
+  }
+});
+document.getElementById("main").addEventListener("input", e => {
+  if (!e.target.classList.contains("note")) return;
+  const id = e.target.closest(".shot").dataset.id;
+  const v = e.target.value.trim();
+  if (v) state.notes[id] = e.target.value; else delete state.notes[id];
+  save();
+});
+document.getElementById("main").addEventListener("toggle", e => {
+  if (e.target.dataset && e.target.dataset.sec) { state["open:"+e.target.dataset.sec] = e.target.open?1:0; save(); }
+}, true);
+document.getElementById("reset").onclick = () => {
+  if (!confirm(`Clear all ticks and notes for ${CAMPS[state.camp].short}?`)) return;
+  for (const k of Object.keys(state.done)) if (k.startsWith(state.camp+":")) delete state.done[k];
+  for (const k of Object.keys(state.notes)) if (k.startsWith(state.camp+":")) delete state.notes[k];
+  save(); render();
+};
+document.getElementById("share").onclick = async () => {
+  const c = state.camp; let out = `${CAMPS[c].name} shot list\n`, missing = [];
+  for (const sec of sectionsFor(c)) {
+    let lines = [];
+    sec.shots.forEach(([title,type,must],i) => {
+      const id = sid(c,sec.id,i), d = state.done[id], n = state.notes[id];
+      if (!d && must) missing.push(title);
+      if (d || n) lines.push(`${d?'✅':'⬜'} ${title}${n?` — ${n.trim()}`:''}`);
+    });
+    if (lines.length) out += `\n${sec.title}\n` + lines.join("\n") + "\n";
+  }
+  if (missing.length) out += `\nStill missing (must-haves):\n- ` + missing.join("\n- ") + "\n";
+  try { if (navigator.share) { await navigator.share({ text: out }); return; } } catch (e) { if (e.name==="AbortError") return; }
+  try { await navigator.clipboard.writeText(out); toast("Copied. Paste it into Discord."); }
+  catch { prompt("Copy this:", out); }
+};
+function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),2200); }
+
+render();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
