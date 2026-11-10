@@ -218,7 +218,13 @@ const KEY = "campshots.v2";
 let state = {};
 try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { state = {}; }
 state.done ||= {}; state.notes ||= {}; state.open ||= {};
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+let saveWarned = false;
+const save = () => {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); saveWarned = false; }
+  catch {
+    if (!saveWarned) { saveWarned = true; alert("⚠️ Couldn't save on this phone (storage full or Private Browsing). Tap 'Share notes' now to keep a copy."); }
+  }
+};
 let filter = "all";
 
 // Today's date in Bali (WITA, UTC+8), so the right camp/day opens automatically.
@@ -233,14 +239,30 @@ function todaySlot() {
   return null;
 }
 // Auto-jump once per calendar day; manual choice sticks for the rest of that day.
-const slot = todaySlot();
-if (state.autoDate !== baliToday()) {
-  state.autoDate = baliToday();
+// Re-checked when the app comes back to the foreground (iOS keeps it suspended overnight).
+let slot = null;
+function syncToday() {
+  slot = todaySlot();
+  const t = baliToday();
+  if (state.autoDate === t) return false;
+  state.autoDate = t;
   if (slot) { state.camp = slot.camp; state.day = slot.day; }
+  return true;
 }
+syncToday();
 if (!CAMPS[state.camp]) state.camp = "padang";
 if (![0,1,2,3].includes(state.day)) state.day = 0;
 save();
+let pendingDayChange = false;
+const onResume = () => {
+  if (document.visibilityState !== "visible") return;
+  if (syncToday()) { save(); pendingDayChange = true; }
+  const typing = document.activeElement && document.activeElement.classList.contains("note");
+  if (pendingDayChange && !typing) { pendingDayChange = false; render(); scrollTo(0,0); }
+};
+document.addEventListener("visibilitychange", onResume);
+window.addEventListener("pageshow", onResume);
+setInterval(onResume, 60000);
 
 function sectionsFor(c) {
   const camp = CAMPS[c];
